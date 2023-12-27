@@ -91,7 +91,7 @@ public class Git {
 		message.update(NULL_BYTES);
 		message.update(data);
 
-		final var hashBytes = message.digest(data);
+		final var hashBytes = message.digest();
 		final var hash = HexFormat.of().formatHex(hashBytes);
 
 		final var first2 = hash.substring(0, 2);
