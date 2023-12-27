@@ -1,5 +1,7 @@
 package git;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -43,9 +45,9 @@ public class Git {
 		return new File(getDotGit(), "HEAD");
 	}
 
-	public byte[] catFile(String blobSha) throws FileNotFoundException, IOException {
-		final var first2 = blobSha.substring(0, 2);
-		final var remaining38 = blobSha.substring(2);
+	public git.Object getObject(String hash) throws FileNotFoundException, IOException {
+		final var first2 = hash.substring(0, 2);
+		final var remaining38 = hash.substring(2);
 
 		final var file = Paths.get(getObjectsDirectory().getPath(), first2, remaining38).toFile();
 
@@ -60,59 +62,80 @@ public class Git {
 				builder.append((char) value);
 			}
 
-			final var objectType = builder.toString();
-			//			System.out.println(objectType);
+			final var objectType = ObjectType.byName(builder.toString());
 
 			builder.setLength(0);
 			while ((value = inflaterInputStream.read()) != -1 && value != 0) {
 				builder.append((char) value);
 			}
 
-			final var objectLength = Long.parseLong(builder.toString());
-			//			System.out.println(objectLength);
+			@SuppressWarnings("unused")
+			final var objectLength = Integer.parseInt(builder.toString());
 
-			return inflaterInputStream.readAllBytes();
+			return objectType.deserialize(new DataInputStream(inflaterInputStream));
 		}
 	}
 
-	public String hashFile(File file) throws IOException, NoSuchAlgorithmException {
-		try (final var inputStream = new FileInputStream(file)) {
-			return hashFile(inputStream.readAllBytes());
+	@SuppressWarnings("unchecked")
+	public String writeObject(git.Object object) throws IOException, NoSuchAlgorithmException {
+		final var objectType = ObjectType.byClass(object.getClass());
+
+		final var temporaryPath = Files.createTempFile("temp-", ".tmp");
+
+		try {
+			try (
+				final var outputStream = Files.newOutputStream(temporaryPath);
+				final var dataOutputStream = new DataOutputStream(outputStream)
+			) {
+				objectType.serialize(object, dataOutputStream);
+			}
+
+			final var length = Files.size(temporaryPath);
+			final var lengthBytes = String.valueOf(length).getBytes();
+
+			final var message = MessageDigest.getInstance("SHA-1");
+			message.update(objectType.getName().getBytes());
+			message.update(SPACE_BYTES);
+			message.update(lengthBytes);
+			message.update(NULL_BYTES);
+
+			try (
+				final var inputStream = Files.newInputStream(temporaryPath);
+			) {
+				final var buffer = new byte[1024];
+
+				int read;
+				while ((read = inputStream.read(buffer)) > 0) {
+					message.update(buffer, 0, read);
+				}
+			}
+
+			final var hashBytes = message.digest();
+			final var hash = HexFormat.of().formatHex(hashBytes);
+
+			final var first2 = hash.substring(0, 2);
+			final var first2Directory = new File(getObjectsDirectory(), first2);
+			first2Directory.mkdirs();
+
+			final var remaining38 = hash.substring(2);
+			final var file = new File(first2Directory, remaining38);
+
+			try (
+				final var outputStream = new FileOutputStream(file);
+				final var deflaterInputStream = new DeflaterOutputStream(outputStream);
+				final var inputStream = Files.newInputStream(temporaryPath)
+			) {
+				deflaterInputStream.write(BLOB_BYTES);
+				deflaterInputStream.write(SPACE_BYTES);
+				deflaterInputStream.write(lengthBytes);
+				deflaterInputStream.write(NULL_BYTES);
+				inputStream.transferTo(deflaterInputStream);
+			}
+
+			return hash;
+		} finally {
+			Files.deleteIfExists(temporaryPath);
 		}
-	}
-
-	public String hashFile(byte[] data) throws IOException, NoSuchAlgorithmException {
-		final var lengthBytes = String.valueOf(data.length).getBytes();
-
-		final var message = MessageDigest.getInstance("SHA-1");
-		message.update(BLOB_BYTES);
-		message.update(SPACE_BYTES);
-		message.update(lengthBytes);
-		message.update(NULL_BYTES);
-		message.update(data);
-
-		final var hashBytes = message.digest();
-		final var hash = HexFormat.of().formatHex(hashBytes);
-
-		final var first2 = hash.substring(0, 2);
-		final var first2Directory = new File(getObjectsDirectory(), first2);
-		first2Directory.mkdirs();
-
-		final var remaining38 = hash.substring(2);
-		final var file = new File(first2Directory, remaining38);
-
-		try (
-			final var outputStream = new FileOutputStream(file);
-			final var deflaterInputStream = new DeflaterOutputStream(outputStream)
-		) {
-			deflaterInputStream.write(BLOB_BYTES);
-			deflaterInputStream.write(SPACE_BYTES);
-			deflaterInputStream.write(lengthBytes);
-			deflaterInputStream.write(NULL_BYTES);
-			deflaterInputStream.write(data);
-		}
-
-		return hash;
 	}
 
 	public static Git init(File root) throws IOException {
