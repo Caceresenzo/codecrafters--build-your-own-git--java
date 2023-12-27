@@ -8,7 +8,7 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Paths;
-import java.util.zip.DeflaterInputStream;
+import java.util.zip.InflaterInputStream;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -42,9 +42,9 @@ public class Git {
 
 		try (
 			final var inputStream = new FileInputStream(file);
-			final var deflaterInputStream = new DeflaterInputStream(inputStream)
+			final var inflaterInputStream = new InflaterInputStream(inputStream)
 		) {
-			return deflaterInputStream.readAllBytes();
+			return inflaterInputStream.readAllBytes();
 		}
 	}
 
