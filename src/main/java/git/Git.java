@@ -44,6 +44,24 @@ public class Git {
 			final var inputStream = new FileInputStream(file);
 			final var inflaterInputStream = new InflaterInputStream(inputStream)
 		) {
+			final var builder = new StringBuilder();
+
+			int value;
+			while ((value = inflaterInputStream.read()) != -1 && value != ' ') {
+				builder.append((char) value);
+			}
+
+			final var objectType = builder.toString();
+			//			System.out.println(objectType);
+
+			builder.setLength(0);
+			while ((value = inflaterInputStream.read()) != -1 && value != 0) {
+				builder.append((char) value);
+			}
+
+			final var objectLength = Long.parseLong(builder.toString());
+			//			System.out.println(objectLength);
+
 			return inflaterInputStream.readAllBytes();
 		}
 	}
