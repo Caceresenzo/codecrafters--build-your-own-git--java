@@ -2,3 +2,4 @@ java_git.jar
 target/*
 target/
 .idea/
+dummy/
