@@ -78,29 +78,29 @@ public class Git {
 			return hashFile(inputStream.readAllBytes());
 		}
 	}
-	
+
 	public String hashFile(byte[] data) throws IOException, NoSuchAlgorithmException {
 		final var hashBytes = MessageDigest.getInstance("SHA-1").digest(data);
 		final var hash = HexFormat.of().formatHex(hashBytes);
-		
+
 		final var first2 = hash.substring(0, 2);
 		final var first2Directory = new File(getObjectsDirectory(), first2);
 		first2Directory.mkdirs();
-		
+
 		final var remaining38 = hash.substring(2);
 		final var file = new File(first2Directory, remaining38);
-		
+
 		try (
 			final var outputStream = new FileOutputStream(file);
 			final var deflaterInputStream = new DeflaterOutputStream(outputStream)
-			) {
+		) {
 			deflaterInputStream.write(BLOB_BYTES);
 			deflaterInputStream.write(' ');
-			deflaterInputStream.write(String.valueOf(hashBytes.length).getBytes());
+			deflaterInputStream.write(String.valueOf(data.length).getBytes());
 			deflaterInputStream.write(0);
 			deflaterInputStream.write(data);
 		}
-		
+
 		return hash;
 	}
 
