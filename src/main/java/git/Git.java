@@ -22,6 +22,8 @@ import lombok.RequiredArgsConstructor;
 public class Git {
 
 	private static final byte[] BLOB_BYTES = "blob".getBytes();
+	private static final byte[] SPACE_BYTES = { ' ' };
+	private static final byte[] NULL_BYTES = { 0 };
 
 	private final File root;
 
@@ -80,7 +82,16 @@ public class Git {
 	}
 
 	public String hashFile(byte[] data) throws IOException, NoSuchAlgorithmException {
-		final var hashBytes = MessageDigest.getInstance("SHA-1").digest(data);
+		final var lengthBytes = String.valueOf(data.length).getBytes();
+
+		final var message = MessageDigest.getInstance("SHA-1");
+		message.update(BLOB_BYTES);
+		message.update(SPACE_BYTES);
+		message.update(lengthBytes);
+		message.update(NULL_BYTES);
+		message.update(data);
+
+		final var hashBytes = message.digest(data);
 		final var hash = HexFormat.of().formatHex(hashBytes);
 
 		final var first2 = hash.substring(0, 2);
@@ -95,9 +106,9 @@ public class Git {
 			final var deflaterInputStream = new DeflaterOutputStream(outputStream)
 		) {
 			deflaterInputStream.write(BLOB_BYTES);
-			deflaterInputStream.write(' ');
-			deflaterInputStream.write(String.valueOf(data.length).getBytes());
-			deflaterInputStream.write(0);
+			deflaterInputStream.write(SPACE_BYTES);
+			deflaterInputStream.write(lengthBytes);
+			deflaterInputStream.write(NULL_BYTES);
 			deflaterInputStream.write(data);
 		}
 
