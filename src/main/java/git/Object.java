@@ -1,3 +1,3 @@
 package git;
 
-public sealed interface Object permits Blob, Tree {}
+public sealed interface Object permits Blob, Commit, Tree {}

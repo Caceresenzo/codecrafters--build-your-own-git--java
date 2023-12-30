@@ -1,10 +1,15 @@
-package git;
+package git.serial;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+
+import git.Tree;
+import git.tree.TreeEntry;
+import git.tree.TreeEntryMode;
+import git.tree.TreeEntryModeType;
 
 public class TreeSerializer implements ObjectSerializer<Tree> {
 
@@ -16,7 +21,6 @@ public class TreeSerializer implements ObjectSerializer<Tree> {
 	}
 
 	public static void serializeEntry(TreeEntry entry, DataOutputStream dataOutputStream) throws IOException {
-		System.out.println(entry.mode().format());
 		dataOutputStream.write(entry.mode().format().getBytes());
 		dataOutputStream.write(' ');
 		dataOutputStream.write(entry.name().getBytes());
@@ -65,16 +69,15 @@ public class TreeSerializer implements ObjectSerializer<Tree> {
 			return null;
 		}
 
-		
 		return new TreeEntry(mode, name, hash);
 	}
-	
+
 	public static TreeEntryMode deserializeEntryMode(String string) {
 		final var value = Integer.parseInt(string, 8);
-		
+
 		final var type = TreeEntryModeType.match(value);
 		final var permission = value & 0b0_111_111_111;
-		
+
 		return new TreeEntryMode(type, permission);
 	}
 

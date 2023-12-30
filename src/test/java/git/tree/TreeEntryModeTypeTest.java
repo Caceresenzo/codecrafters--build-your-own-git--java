@@ -1,4 +1,4 @@
-package git;
+package git.tree;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -8,7 +8,6 @@ class TreeEntryModeTypeTest {
 
 	@Test
 	void match() {
-		
 		assertEquals(TreeEntryModeType.DIRECTORY, TreeEntryModeType.match(0b0100000000000000));
 
 		assertEquals(TreeEntryModeType.REGULAR_FILE, TreeEntryModeType.match(0b1000000110100100));

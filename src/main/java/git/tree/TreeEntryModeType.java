@@ -1,4 +1,4 @@
-package git;
+package git.tree;
 
 import lombok.Getter;
 import lombok.experimental.Accessors;

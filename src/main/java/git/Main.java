@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
+import java.time.ZonedDateTime;
 
 public class Main {
 
@@ -18,6 +19,7 @@ public class Main {
 			case "hash-object" -> hashFile(args[2]);
 			case "ls-tree" -> lsTree(args[2]);
 			case "write-tree" -> writeTree();
+			case "commit-tree" -> commitTree(args[1], args[3], args[5]);
 			default -> System.out.println("Unknown command: " + command);
 		}
 	}
@@ -53,6 +55,15 @@ public class Main {
 	public static void writeTree() throws IOException, NoSuchAlgorithmException {
 		final var git = Git.open(HERE);
 		final var hash = git.writeTree(HERE);
+
+		System.out.println(hash);
+	}
+
+	public static void commitTree(String treeHash, String parentHash, String message) throws IOException, NoSuchAlgorithmException {
+		final var git = Git.open(HERE);
+
+		final var enzo = new AuthorSignature("Caceresenzo", "caceresenzo1502@gmail.com", ZonedDateTime.now());
+		final var hash = git.writeCommit(treeHash, parentHash, enzo, message);
 
 		System.out.println(hash);
 	}

@@ -23,6 +23,8 @@ import java.util.function.Predicate;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
+import git.tree.TreeEntry;
+import git.tree.TreeEntryMode;
 import git.util.Platform;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -199,6 +201,16 @@ public class Git {
 		final var tree = new Tree(entries);
 
 		return writeObject(tree);
+	}
+
+	public String writeCommit(String treeHash, String parentHash, AuthorSignature author, String message) throws NoSuchAlgorithmException, IOException {
+		return writeObject(new Commit(
+			treeHash,
+			parentHash,
+			author,
+			author,
+			message
+		));
 	}
 
 	public static Git init(Path root) throws IOException {
