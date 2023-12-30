@@ -56,6 +56,10 @@ public class Git {
 		return getDotGit().resolve("HEAD");
 	}
 
+	public Path getConfigFile() {
+		return getDotGit().resolve("config");
+	}
+
 	public git.Object readObject(String hash) throws FileNotFoundException, IOException {
 		final var first2 = hash.substring(0, 2);
 		final var remaining38 = hash.substring(2);
@@ -211,6 +215,10 @@ public class Git {
 		final var head = git.getHeadFile();
 		Files.createFile(head);
 		Files.write(head, "ref: refs/heads/master\n".getBytes());
+
+		final var config = git.getConfigFile();
+		Files.createFile(config);
+		Files.write(config, ("[core]\n        autocrlf = false").getBytes());
 
 		return git;
 	}
