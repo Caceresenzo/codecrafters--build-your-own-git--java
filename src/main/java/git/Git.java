@@ -16,6 +16,7 @@ import java.nio.file.attribute.PosixFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HexFormat;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -190,6 +191,7 @@ public class Git {
 			entries.add(new TreeEntry(mode, fileName.toString(), hash));
 		}
 
+		Collections.sort(entries);
 		final var tree = new Tree(entries);
 
 		return writeObject(tree);

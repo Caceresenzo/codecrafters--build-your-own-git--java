@@ -7,7 +7,7 @@ public record TreeEntry(
 	TreeEntryMode mode,
 	String name,
 	byte[] hash
-) {
+) implements Comparable<TreeEntry> {
 
 	public void serialize(DataOutputStream dataOutputStream) throws IOException {
 		dataOutputStream.write(mode.format().getBytes());
@@ -15,6 +15,11 @@ public record TreeEntry(
 		dataOutputStream.write(name.getBytes());
 		dataOutputStream.write('\0');
 		dataOutputStream.write(hash);
+	}
+
+	@Override
+	public int compareTo(TreeEntry other) {
+		return name.compareTo(other.name);
 	}
 
 }
