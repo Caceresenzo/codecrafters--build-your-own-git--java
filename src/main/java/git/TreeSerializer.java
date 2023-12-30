@@ -15,8 +15,8 @@ public class TreeSerializer implements ObjectSerializer<Tree> {
 		}
 	}
 
-	public void serializeEntry(TreeEntry entry, DataOutputStream dataOutputStream) throws IOException {
-		dataOutputStream.write(entry.mode().getBytes());
+	public static void serializeEntry(TreeEntry entry, DataOutputStream dataOutputStream) throws IOException {
+		dataOutputStream.write(entry.mode().format().getBytes());
 		dataOutputStream.write(' ');
 		dataOutputStream.write(entry.name().getBytes());
 		dataOutputStream.write('\0');
@@ -35,7 +35,7 @@ public class TreeSerializer implements ObjectSerializer<Tree> {
 		return new Tree(Collections.unmodifiableList(entries));
 	}
 
-	public TreeEntry deserializeEntry(DataInputStream dataInputStream) throws IOException {
+	public static TreeEntry deserializeEntry(DataInputStream dataInputStream) throws IOException {
 		final var builder = new StringBuilder();
 
 		int value;
@@ -47,7 +47,7 @@ public class TreeSerializer implements ObjectSerializer<Tree> {
 			return null;
 		}
 
-		final var mode = builder.toString();
+		final var mode = deserializeEntryMode(builder.toString());
 
 		builder.setLength(0);
 		while ((value = dataInputStream.read()) > 0) {
@@ -64,7 +64,17 @@ public class TreeSerializer implements ObjectSerializer<Tree> {
 			return null;
 		}
 
+		
 		return new TreeEntry(mode, name, hash);
+	}
+	
+	public static TreeEntryMode deserializeEntryMode(String string) {
+		final var value = Integer.parseInt(string, 8);
+		
+		final var type = TreeEntryModeType.match(value);
+		final var permission = value & 0b0_111_111_111;
+		
+		return new TreeEntryMode(type, permission);
 	}
 
 }

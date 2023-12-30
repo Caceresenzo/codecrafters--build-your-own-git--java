@@ -10,49 +10,59 @@ import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.Set;
+import java.util.function.Predicate;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
+import git.util.Platform;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class Git {
 
-	private static final byte[] BLOB_BYTES = "blob".getBytes();
+	public static final HexFormat HEX = HexFormat.of();
+	public static final Set<Path> FORBIDDEN_DIRECTORIES = Set.of(
+		Paths.get(".git")
+	);
+
 	private static final byte[] SPACE_BYTES = { ' ' };
 	private static final byte[] NULL_BYTES = { 0 };
 
-	private final File root;
+	private final Path root;
 
-	public File getDotGit() {
-		return new File(root, ".git");
+	public Path getDotGit() {
+		return root.resolve(".git");
 	}
 
-	public File getObjectsDirectory() {
-		return new File(getDotGit(), "objects");
+	public Path getObjectsDirectory() {
+		return getDotGit().resolve("objects");
 	}
 
-	public File getRefsDirectory() {
-		return new File(getDotGit(), "refs");
+	public Path getRefsDirectory() {
+		return getDotGit().resolve("refs");
 	}
 
-	public File getHeadFile() {
-		return new File(getDotGit(), "HEAD");
+	public Path getHeadFile() {
+		return getDotGit().resolve("HEAD");
 	}
 
-	public git.Object getObject(String hash) throws FileNotFoundException, IOException {
+	public git.Object readObject(String hash) throws FileNotFoundException, IOException {
 		final var first2 = hash.substring(0, 2);
 		final var remaining38 = hash.substring(2);
 
-		final var file = Paths.get(getObjectsDirectory().getPath(), first2, remaining38).toFile();
+		final var path = getObjectsDirectory().resolve(first2).resolve(remaining38);
 
 		try (
-			final var inputStream = new FileInputStream(file);
+			final var inputStream = new FileInputStream(path.toFile());
 			final var inflaterInputStream = new InflaterInputStream(inputStream)
 		) {
 			final var builder = new StringBuilder();
@@ -79,6 +89,7 @@ public class Git {
 	@SuppressWarnings("unchecked")
 	public String writeObject(git.Object object) throws IOException, NoSuchAlgorithmException {
 		final var objectType = ObjectType.byClass(object.getClass());
+		final var objectTypeBytes = objectType.getName().getBytes();
 
 		final var temporaryPath = Files.createTempFile("temp-", ".tmp");
 
@@ -94,7 +105,7 @@ public class Git {
 			final var lengthBytes = String.valueOf(length).getBytes();
 
 			final var message = MessageDigest.getInstance("SHA-1");
-			message.update(objectType.getName().getBytes());
+			message.update(objectTypeBytes);
 			message.update(SPACE_BYTES);
 			message.update(lengthBytes);
 			message.update(NULL_BYTES);
@@ -114,7 +125,7 @@ public class Git {
 			final var hash = HexFormat.of().formatHex(hashBytes);
 
 			final var first2 = hash.substring(0, 2);
-			final var first2Directory = new File(getObjectsDirectory(), first2);
+			final var first2Directory = new File(getObjectsDirectory().toFile(), first2);
 			first2Directory.mkdirs();
 
 			final var remaining38 = hash.substring(2);
@@ -125,7 +136,7 @@ public class Git {
 				final var deflaterInputStream = new DeflaterOutputStream(outputStream);
 				final var inputStream = Files.newInputStream(temporaryPath)
 			) {
-				deflaterInputStream.write(BLOB_BYTES);
+				deflaterInputStream.write(objectTypeBytes);
 				deflaterInputStream.write(SPACE_BYTES);
 				deflaterInputStream.write(lengthBytes);
 				deflaterInputStream.write(NULL_BYTES);
@@ -138,29 +149,75 @@ public class Git {
 		}
 	}
 
-	public static Git init(File root) throws IOException {
+	public String writeBlob(Path path) throws IOException, NoSuchAlgorithmException {
+		final var bytes = Files.readAllBytes(path);
+		final var blob = new Blob(bytes);
+
+		return writeObject(blob);
+	}
+
+	public String writeTree(Path root) throws IOException, NoSuchAlgorithmException {
+		final var fileNames = Files.list(root)
+			.map(Path::getFileName)
+			.filter(Predicate.not(FORBIDDEN_DIRECTORIES::contains))
+			.toList();
+
+		final var entries = new ArrayList<TreeEntry>();
+
+		for (final var fileName : fileNames) {
+			final var path = root.resolve(fileName);
+
+			String hashString;
+			TreeEntryMode mode;
+
+			if (Files.isDirectory(path)) {
+				hashString = writeTree(path);
+				mode = TreeEntryMode.directory();
+			} else if (Files.isRegularFile(path)) {
+				hashString = writeBlob(path);
+
+				if (Platform.isWindows()) {
+					mode = TreeEntryMode.regularFile(0644);
+				} else {
+					final var attributes = Files.readAttributes(path, PosixFileAttributes.class);
+					mode = TreeEntryMode.regularFile(attributes);
+				}
+			} else {
+				continue;
+			}
+
+			final var hash = HEX.parseHex(hashString);
+			entries.add(new TreeEntry(mode, fileName.toString(), hash));
+		}
+
+		final var tree = new Tree(entries);
+
+		return writeObject(tree);
+	}
+
+	public static Git init(Path root) throws IOException {
 		final var git = new Git(root);
 
 		final var dotGit = git.getDotGit();
-		if (dotGit.exists()) {
+		if (Files.exists(dotGit)) {
 			throw new FileAlreadyExistsException(dotGit.toString());
 		}
 
-		git.getObjectsDirectory().mkdirs();
-		git.getRefsDirectory().mkdirs();
+		Files.createDirectories(git.getObjectsDirectory());
+		Files.createDirectories(git.getRefsDirectory());
 
 		final var head = git.getHeadFile();
-		head.createNewFile();
-		Files.write(head.toPath(), "ref: refs/heads/master\n".getBytes());
+		Files.createFile(head);
+		Files.write(head, "ref: refs/heads/master\n".getBytes());
 
 		return git;
 	}
 
-	public static Git open(File root) throws IOException {
+	public static Git open(Path root) throws IOException {
 		final var git = new Git(root);
 
 		final var dotGit = git.getDotGit();
-		if (!dotGit.exists()) {
+		if (!Files.exists(dotGit)) {
 			throw new NoSuchFileException(dotGit.toString());
 		}
 
