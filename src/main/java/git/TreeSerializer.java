@@ -16,6 +16,7 @@ public class TreeSerializer implements ObjectSerializer<Tree> {
 	}
 
 	public static void serializeEntry(TreeEntry entry, DataOutputStream dataOutputStream) throws IOException {
+		System.out.println(entry.mode().format());
 		dataOutputStream.write(entry.mode().format().getBytes());
 		dataOutputStream.write(' ');
 		dataOutputStream.write(entry.name().getBytes());

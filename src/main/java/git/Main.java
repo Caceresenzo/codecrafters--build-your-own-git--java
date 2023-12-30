@@ -7,7 +7,7 @@ import java.security.NoSuchAlgorithmException;
 
 public class Main {
 
-	public static final Path HERE = Paths.get(".");
+	public static final Path HERE = Paths.get("/tmp/gitty");
 
 	public static void main(String[] args) throws IOException, NoSuchAlgorithmException {
 		final var command = args[0];

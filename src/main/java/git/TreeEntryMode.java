@@ -29,18 +29,11 @@ public record TreeEntryMode(
 	public static TreeEntryMode regularFile(PosixFileAttributes attributes) {
 		final var permissions = attributes.permissions();
 
-		var result = 0;
-		var mask = 1;
-
-		for (final var permission : PosixFilePermission.values()) {
-			if (permissions.contains(permission)) {
-				result |= mask;
-			}
-
-			mask <<= 1;
+		if (permissions.contains(PosixFilePermission.OWNER_EXECUTE)) {
+			return regularFile(0755);
 		}
 
-		return regularFile(result);
+		return regularFile(0644);
 	}
 
 }
