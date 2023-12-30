@@ -15,7 +15,7 @@ public record TreeEntryMode(
 	}
 
 	public String format() {
-		return Integer.toBinaryString(type.shifted() + permission);
+		return Integer.toOctalString(type.shifted() + permission);
 	}
 
 	public static TreeEntryMode directory() {
