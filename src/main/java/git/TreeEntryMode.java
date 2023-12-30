@@ -15,7 +15,7 @@ public record TreeEntryMode(
 	}
 
 	public String format() {
-		return "%06o".formatted(type.shifted() + permission);
+		return Integer.toBinaryString(type.shifted() + permission);
 	}
 
 	public static TreeEntryMode directory() {
