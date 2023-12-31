@@ -1,4 +1,4 @@
-package git;
+package git.domain;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -6,10 +6,10 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
-import git.serial.BlobSerializer;
-import git.serial.CommitSerializer;
-import git.serial.ObjectSerializer;
-import git.serial.TreeSerializer;
+import git.domain.serial.BlobSerializer;
+import git.domain.serial.CommitSerializer;
+import git.domain.serial.ObjectSerializer;
+import git.domain.serial.TreeSerializer;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 

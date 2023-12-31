@@ -1,4 +1,4 @@
-package git;
+package git.domain;
 
 public record Blob(
 	byte[] data

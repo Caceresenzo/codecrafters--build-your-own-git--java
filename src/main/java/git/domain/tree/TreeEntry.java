@@ -1,4 +1,4 @@
-package git.tree;
+package git.domain.tree;
 
 import java.io.DataOutputStream;
 import java.io.IOException;

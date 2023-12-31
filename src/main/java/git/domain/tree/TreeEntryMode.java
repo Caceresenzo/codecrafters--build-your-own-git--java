@@ -1,4 +1,4 @@
-package git.tree;
+package git.domain.tree;
 
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;

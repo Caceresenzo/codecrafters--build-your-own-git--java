@@ -1,10 +1,10 @@
-package git.serial;
+package git.domain.serial;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-import git.Blob;
+import git.domain.Blob;
 
 public class BlobSerializer implements ObjectSerializer<Blob> {
 

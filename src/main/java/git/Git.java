@@ -7,6 +7,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -16,6 +17,7 @@ import java.nio.file.attribute.PosixFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HexFormat;
 import java.util.Set;
@@ -23,14 +25,22 @@ import java.util.function.Predicate;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
-import git.tree.TreeEntry;
-import git.tree.TreeEntryMode;
+import git.domain.AuthorSignature;
+import git.domain.Blob;
+import git.domain.Commit;
+import git.domain.ObjectType;
+import git.domain.Tree;
+import git.domain.tree.TreeEntry;
+import git.domain.tree.TreeEntryMode;
+import git.protocol.GitClient;
 import git.util.Platform;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class Git {
+
+	public static final int HASH_STRING_LENGTH = 40;
 
 	public static final HexFormat HEX = HexFormat.of();
 	public static final Set<Path> FORBIDDEN_DIRECTORIES = Set.of(
@@ -62,7 +72,7 @@ public class Git {
 		return getDotGit().resolve("config");
 	}
 
-	public git.Object readObject(String hash) throws FileNotFoundException, IOException {
+	public git.domain.Object readObject(String hash) throws FileNotFoundException, IOException {
 		final var first2 = hash.substring(0, 2);
 		final var remaining38 = hash.substring(2);
 
@@ -94,7 +104,7 @@ public class Git {
 	}
 
 	@SuppressWarnings("unchecked")
-	public String writeObject(git.Object object) throws IOException, NoSuchAlgorithmException {
+	public String writeObject(git.domain.Object object) throws IOException, NoSuchAlgorithmException {
 		final var objectType = ObjectType.byClass(object.getClass());
 		final var objectTypeBytes = objectType.getName().getBytes();
 
@@ -242,6 +252,22 @@ public class Git {
 		if (!Files.exists(dotGit)) {
 			throw new NoSuchFileException(dotGit.toString());
 		}
+
+		return git;
+	}
+
+	public static Git clone(URI uri, Path path) throws IOException {
+		final var client = new GitClient(uri);
+		final var reference = client.fetchReferences().getFirst();
+		final var pack = client.getPack(reference);
+		new FileOutputStream("test.pack").write(pack);
+
+		System.out.println(Arrays.toString(pack));
+		System.exit(1);
+
+		Files.createDirectories(path);
+
+		final var git = new Git(path);
 
 		return git;
 	}

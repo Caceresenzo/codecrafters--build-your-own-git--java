@@ -1,10 +1,10 @@
-package git.serial;
+package git.domain.serial;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-import git.Object;
+import git.domain.Object;
 
 public interface ObjectSerializer<T extends Object> {
 

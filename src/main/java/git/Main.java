@@ -1,10 +1,15 @@
 package git;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
 import java.time.ZonedDateTime;
+
+import git.domain.AuthorSignature;
+import git.domain.Blob;
+import git.domain.Tree;
 
 public class Main {
 
@@ -20,6 +25,7 @@ public class Main {
 			case "ls-tree" -> lsTree(args[2]);
 			case "write-tree" -> writeTree();
 			case "commit-tree" -> commitTree(args[1], args[3], args[5]);
+			case "clone" -> clone(args[1], args[2]);
 			default -> System.out.println("Unknown command: " + command);
 		}
 	}
@@ -66,6 +72,12 @@ public class Main {
 		final var hash = git.writeCommit(treeHash, parentHash, enzo, message);
 
 		System.out.println(hash);
+	}
+
+	public static void clone(String uri, String path) throws IOException, NoSuchAlgorithmException {
+		Git.clone(URI.create(uri), Paths.get(path));
+
+		System.out.println("Cloned git repository");
 	}
 
 }

@@ -1,8 +1,8 @@
-package git;
+package git.domain;
 
 import java.util.List;
 
-import git.tree.TreeEntry;
+import git.domain.tree.TreeEntry;
 
 public record Tree(
 	List<TreeEntry> entries

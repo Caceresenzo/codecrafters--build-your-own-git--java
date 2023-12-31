@@ -1,4 +1,4 @@
-package git.tree;
+package git.domain.tree;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

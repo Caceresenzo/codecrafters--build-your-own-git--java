@@ -1,4 +1,4 @@
-package git.serial;
+package git.domain.serial;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -6,10 +6,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 
-import git.Tree;
-import git.tree.TreeEntry;
-import git.tree.TreeEntryMode;
-import git.tree.TreeEntryModeType;
+import git.domain.Tree;
+import git.domain.tree.TreeEntry;
+import git.domain.tree.TreeEntryMode;
+import git.domain.tree.TreeEntryModeType;
 
 public class TreeSerializer implements ObjectSerializer<Tree> {
 
