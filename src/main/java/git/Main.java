@@ -9,8 +9,6 @@ import java.time.ZonedDateTime;
 import java.util.zip.DataFormatException;
 
 import git.domain.AuthorSignature;
-import git.domain.Blob;
-import git.domain.Tree;
 
 public class Main {
 
@@ -38,7 +36,7 @@ public class Main {
 
 	public static void catFile(String hash) throws IOException {
 		final var git = Git.open(HERE);
-		final var blob = (Blob) git.readObject(hash);
+		final var blob = git.readBlob(hash);
 
 		System.out.write(blob.data());
 	}
@@ -52,7 +50,7 @@ public class Main {
 
 	public static void lsTree(String hash) throws IOException, NoSuchAlgorithmException {
 		final var git = Git.open(HERE);
-		final var tree = (Tree) git.readObject(hash);
+		final var tree = git.readTree(hash);
 
 		for (final var entry : tree.entries()) {
 			System.out.println(entry.name());

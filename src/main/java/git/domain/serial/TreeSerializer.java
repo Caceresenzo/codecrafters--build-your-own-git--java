@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 
+import git.Git;
 import git.domain.Tree;
 import git.domain.tree.TreeEntry;
 import git.domain.tree.TreeEntryMode;
@@ -16,7 +17,7 @@ public class TreeSerializer implements ObjectContentSerializer<Tree> {
 	@Override
 	public void serialize(Tree tree, DataOutputStream dataOutputStream) throws IOException {
 		for (final var entry : tree.entries()) {
-			entry.serialize(dataOutputStream);
+			serializeEntry(entry, dataOutputStream);
 		}
 	}
 
@@ -25,7 +26,7 @@ public class TreeSerializer implements ObjectContentSerializer<Tree> {
 		dataOutputStream.write(' ');
 		dataOutputStream.write(entry.name().getBytes());
 		dataOutputStream.write('\0');
-		dataOutputStream.write(entry.hash());
+		dataOutputStream.write(Git.HEX.parseHex(entry.hash()));
 	}
 
 	@Override
@@ -64,10 +65,12 @@ public class TreeSerializer implements ObjectContentSerializer<Tree> {
 		}
 
 		final var name = builder.toString();
-		final var hash = dataInputStream.readNBytes(20);
-		if (hash.length != 20) {
+		final var hashBytes = dataInputStream.readNBytes(20);
+		if (hashBytes.length != 20) {
 			return null;
 		}
+
+		final var hash = Git.HEX.formatHex(hashBytes);
 
 		return new TreeEntry(mode, name, hash);
 	}

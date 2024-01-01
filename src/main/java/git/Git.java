@@ -28,6 +28,7 @@ import java.util.zip.InflaterInputStream;
 import git.domain.AuthorSignature;
 import git.domain.Blob;
 import git.domain.Commit;
+import git.domain.GitObject;
 import git.domain.ObjectType;
 import git.domain.Tree;
 import git.domain.tree.TreeEntry;
@@ -76,7 +77,19 @@ public class Git {
 		return getDotGit().resolve("config");
 	}
 
-	public git.domain.Object readObject(String hash) throws FileNotFoundException, IOException {
+	public Blob readBlob(String hash) throws FileNotFoundException, IOException {
+		return readObject(ObjectType.BLOB, hash);
+	}
+
+	public Commit readCommit(String hash) throws FileNotFoundException, IOException {
+		return readObject(ObjectType.COMMIT, hash);
+	}
+
+	public Tree readTree(String hash) throws FileNotFoundException, IOException {
+		return readObject(ObjectType.TREE, hash);
+	}
+
+	public <T extends GitObject> T readObject(ObjectType<T> type, String hash) throws FileNotFoundException, IOException {
 		final var first2 = hash.substring(0, 2);
 		final var remaining38 = hash.substring(2);
 
@@ -93,7 +106,10 @@ public class Git {
 				builder.append((char) value);
 			}
 
-			final var objectType = ObjectType.byName(builder.toString());
+			final var typeString = builder.toString();
+			if (!type.getName().equals(typeString)) {
+				throw new IllegalArgumentException("trying to read %s as %s (%s)".formatted(typeString, type.getName(), hash));
+			}
 
 			builder.setLength(0);
 			while ((value = inflaterInputStream.read()) != -1 && value != 0) {
@@ -101,9 +117,9 @@ public class Git {
 			}
 
 			@SuppressWarnings("unused")
-			final var objectLength = Integer.parseInt(builder.toString());
+			final var length = Integer.parseInt(builder.toString());
 
-			return objectType.deserialize(new DataInputStream(inflaterInputStream));
+			return type.deserialize(new DataInputStream(inflaterInputStream));
 		}
 	}
 
@@ -139,7 +155,7 @@ public class Git {
 	}
 
 	@SuppressWarnings("unchecked")
-	public String writeObject(git.domain.Object object) throws IOException, NoSuchAlgorithmException {
+	public String writeObject(git.domain.GitObject object) throws IOException, NoSuchAlgorithmException {
 		final var objectType = ObjectType.byClass(object.getClass());
 
 		return writeRawObject(objectType.serialize(object));
@@ -205,14 +221,14 @@ public class Git {
 		for (final var fileName : fileNames) {
 			final var path = root.resolve(fileName);
 
-			String hashString;
+			String hash;
 			TreeEntryMode mode;
 
 			if (Files.isDirectory(path)) {
-				hashString = writeTree(path);
+				hash = writeTree(path);
 				mode = TreeEntryMode.directory();
 			} else if (Files.isRegularFile(path)) {
-				hashString = writeBlob(path);
+				hash = writeBlob(path);
 
 				if (Platform.isWindows()) {
 					mode = TreeEntryMode.regularFile(0644);
@@ -224,7 +240,6 @@ public class Git {
 				continue;
 			}
 
-			final var hash = HEX.parseHex(hashString);
 			entries.add(new TreeEntry(mode, fileName.toString(), hash));
 		}
 
@@ -242,6 +257,45 @@ public class Git {
 			author,
 			message
 		));
+	}
+
+	public void checkout(Tree tree) throws FileNotFoundException, IOException {
+		checkout(tree, root);
+	}
+
+	public void checkout(Tree tree, Path root) throws FileNotFoundException, IOException {
+		for (final var entry : tree.entries()) {
+			switch (entry.mode().type()) {
+				case REGULAR_FILE: {
+					final var blob = readBlob(entry.hash());
+					final var path = root.resolve(entry.name());
+
+					checkout(blob, path);
+
+					break;
+				}
+
+				case DIRECTORY: {
+					final var subTree = readTree(entry.hash());
+					final var subRoot = root.resolve(entry.name());
+
+					Files.createDirectories(subRoot);
+					checkout(subTree, subRoot);
+
+					break;
+				}
+
+				default: {
+					throw new UnsupportedOperationException("entry type: " + entry.mode().type());
+				}
+			}
+		}
+	}
+
+	public void checkout(Blob blob, Path path) throws FileNotFoundException, IOException {
+		System.err.println("checkout %s".formatted(path));
+
+		Files.write(path, blob.data());
 	}
 
 	public static Git init(Path root) throws IOException {
@@ -279,14 +333,14 @@ public class Git {
 
 	public static Git clone(URI uri, Path path) throws IOException, DataFormatException, NoSuchAlgorithmException {
 		final var client = new GitClient(uri);
-		final var reference = client.fetchReferences().getFirst();
-		final var pack = client.getPack(reference);
+		final var head = client.fetchReferences().getFirst();
+		final var pack = client.getPack(head);
 
 		final var packParser = new PackParser(ByteBuffer.wrap(pack));
 		final var objects = packParser.parse();
 
-		final var git = init(path);
-		//		final var git = open(path);
+		//		final var git = init(path);
+		final var git = open(path);
 
 		for (final var object : objects) {
 			if (!(object instanceof PackObject.Undeltified undeltified)) {
@@ -329,6 +383,11 @@ public class Git {
 			final var hash = git.writeRawObject(new RawObject(baseType, content));
 			System.err.println("wrote %s %s".formatted(hash, baseType.getName()));
 		}
+
+		final var headCommit = git.readCommit(head.hash());
+		final var headTree = git.readTree(headCommit.treeHash());
+
+		git.checkout(headTree);
 
 		return git;
 	}

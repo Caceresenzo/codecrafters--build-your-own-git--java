@@ -4,9 +4,9 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-import git.domain.Object;
+import git.domain.GitObject;
 
-public interface ObjectContentSerializer<T extends Object> {
+public interface ObjectContentSerializer<T extends GitObject> {
 
 	void serialize(T object, DataOutputStream dataOutputStream) throws IOException;
 

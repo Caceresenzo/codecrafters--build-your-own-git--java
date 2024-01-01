@@ -6,4 +6,4 @@ import git.domain.tree.TreeEntry;
 
 public record Tree(
 	List<TreeEntry> entries
-) implements Object {}
+) implements GitObject {}

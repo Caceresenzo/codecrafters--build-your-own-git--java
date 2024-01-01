@@ -18,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 @SuppressWarnings("rawtypes")
 @RequiredArgsConstructor
 @Getter
-public class ObjectType<T extends Object> {
+public class ObjectType<T extends GitObject> {
 
 	private static final byte[] SPACE_BYTES = { ' ' };
 	private static final byte[] NULL_BYTES = { 0 };
@@ -90,7 +90,7 @@ public class ObjectType<T extends Object> {
 		throw new IllegalArgumentException("unknown object type: " + name);
 	}
 
-	public static ObjectType byClass(Class<? extends Object> clazz) {
+	public static ObjectType byClass(Class<? extends GitObject> clazz) {
 		for (final var type : TYPES) {
 			if (type.getObjectClass().equals(clazz)) {
 				return type;
