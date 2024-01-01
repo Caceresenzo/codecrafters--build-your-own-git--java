@@ -1,13 +1,16 @@
 package git.pack;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.zip.InflaterInputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.zip.DataFormatException;
+import java.util.zip.Inflater;
 
+import git.Git;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 
 @RequiredArgsConstructor
 public class PackParser {
@@ -19,31 +22,67 @@ public class PackParser {
 
 	private final ByteBuffer buffer;
 
-	public void parse() throws IOException {
+	@SneakyThrows
+	public List<PackObject> parse() throws IOException, DataFormatException {
 		parseSignature();
 		parseVersion();
 
-		System.out.println(buffer.order());
 		final var objectCount = buffer.getInt();
-		System.out.println(buffer.position());
+		final var objects = new ArrayList<PackObject>(objectCount);
+		final var objectByOffset = new HashMap<Integer, Object>(objectCount);
 
 		for (var index = 0; index < objectCount; ++index) {
-			final var objectHeader = parseObjectHeader();
-			System.out.println(objectHeader);
+			final var header = parseObjectHeader();
+			final var type = header.type();
+			final var bufferPosition = buffer.position();
 
-			// Read compressed data
-			byte[] compressedData = new byte[objectHeader.size()];
-			buffer.get(compressedData);
+			final PackObject object = switch (type) {
+				case COMMIT:
+				case TREE:
+				case BLOB: {
+					final var content = inflate(header.size());
 
-			final var stream = new InflaterInputStream(new ByteArrayInputStream(compressedData));
-			System.out.println(new String(stream.readAllBytes()));
+					yield PackObject.undeltified(type.nativeType(), content);
+				}
+
+				case TAG: {
+					throw new UnsupportedOperationException();
+				}
+
+				case OFS_DELTA: {
+					throw new UnsupportedOperationException();
+				}
+
+				case REF_DELTA: {
+					final var hashBytes = new byte[Git.HASH_BYTES_LENGTH];
+					buffer.get(hashBytes);
+
+					final var baseHash = Git.HEX.formatHex(hashBytes);
+
+					final var content = inflate(header.size());
+					final var contentBuffer = ByteBuffer.wrap(content);
+
+					@SuppressWarnings("unused")
+					final var baseObjectSize = parseVariableLengthIntegerLittleEndian(contentBuffer);
+					final var newObjectSize = parseVariableLengthIntegerLittleEndian(contentBuffer);
+
+					final var instructions = parseDeltaInstructions(contentBuffer);
+
+					yield PackObject.deltified(baseHash, newObjectSize, instructions);
+				}
+			};
+
+			if (object != null) {
+				objects.add(object);
+				objectByOffset.put(bufferPosition, buffer);
+			}
 		}
 
-		System.out.println(objectCount);
+		return objects;
 	}
 
 	public void parseSignature() {
-		final var bytes = new byte[4];
+		final var bytes = new byte[Integer.BYTES];
 		buffer.get(bytes);
 
 		final var signature = new String(bytes);
@@ -62,33 +101,101 @@ public class PackParser {
 
 	public PackObjectHeader parseObjectHeader() {
 		var read = Byte.toUnsignedInt(buffer.get());
-		System.out.println("xread %d   %8s".formatted(read, Integer.toBinaryString(read)));
+
 		final var type = PackObjectType.valueOf((read & TYPE_MASK) >> 4);
 		var size = read & SIZE_4_MASK;
-		System.out.println(Integer.toBinaryString(size));
 
 		if ((read & SIZE_CONTINUE_MASK) == 0) {
 			return new PackObjectHeader(type, size);
 		}
 
-		var offset = 4;
-		do {
-			read = Byte.toUnsignedInt(buffer.get());
-			System.out.println(" read %d   %8s".formatted(read, Integer.toBinaryString(read)));
-			size |= (read & SIZE_7_MASK) << offset;
-			System.out.println(Integer.toBinaryString(size));
-			offset += 7;
-		} while ((read & SIZE_CONTINUE_MASK) != 0);
-
+		size |= parseVariableLengthIntegerLittleEndian(buffer) << 4;
 		return new PackObjectHeader(type, size);
 	}
 
-	public static void main(String[] args) throws IOException {
-		final var bytes = Files.readAllBytes(Paths.get("test.pack"));
-		final var buffer = ByteBuffer.wrap(bytes);
+	public byte[] inflate(int size) throws DataFormatException {
+		final var inflater = new Inflater();
+		inflater.setInput(buffer);
 
-		final var parser = new PackParser(buffer);
-		parser.parse();
+		final var inflated = new byte[size];
+		inflater.inflate(inflated);
+
+		return inflated;
+	}
+
+	public List<DeltaInstruction> parseDeltaInstructions(ByteBuffer buffer) {
+		final var instructions = new ArrayList<DeltaInstruction>();
+
+		while (buffer.hasRemaining()) {
+			final var first = Byte.toUnsignedInt(buffer.get());
+
+			if (first == 0) {
+				throw new IllegalStateException("unsuppoted 00000000 instruction");
+			}
+
+			final var command = first & 0b1000_0000;
+
+			if (command == 0) {
+				final var size = first & 0b0111_1111;
+
+				final var bytes = new byte[size];
+				buffer.get(bytes);
+
+				instructions.add(DeltaInstruction.insert(bytes));
+			} else {
+				final var hasOffset1 = (first & 0b0000_0001) != 0;
+				final var hasOffset2 = (first & 0b0000_0010) != 0;
+				final var hasOffset3 = (first & 0b0000_0100) != 0;
+				final var hasOffset4 = (first & 0b0000_1000) != 0;
+				final var hasSize1 = (first & 0b0001_0000) != 0;
+				final var hasSize2 = (first & 0b0010_0000) != 0;
+				final var hasSize3 = (first & 0b0100_0000) != 0;
+
+				final var offset = parseVariableLengthInteger(buffer, hasOffset1, hasOffset2, hasOffset3, hasOffset4);
+				var size = parseVariableLengthInteger(buffer, hasSize1, hasSize2, hasSize3);
+				if (size == 0) {
+					size = 0x10000;
+				}
+
+				instructions.add(DeltaInstruction.copy(offset, size));
+			}
+		}
+
+		return instructions;
+	}
+
+	public static int parseVariableLengthInteger(ByteBuffer buffer, boolean... enabledStates) {
+		var value = 0;
+		var offset = 0;
+
+		for (final var state : enabledStates) {
+			if (state) {
+				final var read = Byte.toUnsignedInt(buffer.get());
+				value += read << offset;
+			}
+
+			offset += 8;
+		}
+
+		return value;
+	}
+
+	public static int parseVariableLengthIntegerLittleEndian(ByteBuffer buffer) {
+		var value = 0;
+		var shift = 0;
+
+		while (true) {
+			final var read = Byte.toUnsignedInt(buffer.get());
+
+			value |= (read & SIZE_7_MASK) << shift;
+			if ((read & SIZE_CONTINUE_MASK) == 0) {
+				break;
+			}
+
+			shift += 7;
+		}
+
+		return value;
 	}
 
 }

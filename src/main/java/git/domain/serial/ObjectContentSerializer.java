@@ -6,7 +6,7 @@ import java.io.IOException;
 
 import git.domain.Object;
 
-public interface ObjectSerializer<T extends Object> {
+public interface ObjectContentSerializer<T extends Object> {
 
 	void serialize(T object, DataOutputStream dataOutputStream) throws IOException;
 

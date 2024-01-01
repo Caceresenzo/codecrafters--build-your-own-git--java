@@ -1,13 +1,13 @@
 package git;
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -17,11 +17,11 @@ import java.nio.file.attribute.PosixFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HexFormat;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.zip.DataFormatException;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
@@ -32,6 +32,9 @@ import git.domain.ObjectType;
 import git.domain.Tree;
 import git.domain.tree.TreeEntry;
 import git.domain.tree.TreeEntryMode;
+import git.pack.DeltaInstruction;
+import git.pack.PackObject;
+import git.pack.PackParser;
 import git.protocol.GitClient;
 import git.util.Platform;
 import lombok.AccessLevel;
@@ -40,6 +43,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class Git {
 
+	public static final int HASH_BYTES_LENGTH = 20;
 	public static final int HASH_STRING_LENGTH = 40;
 
 	public static final HexFormat HEX = HexFormat.of();
@@ -103,67 +107,84 @@ public class Git {
 		}
 	}
 
+	public RawObject readRawObject(String hash) throws FileNotFoundException, IOException {
+		final var first2 = hash.substring(0, 2);
+		final var remaining38 = hash.substring(2);
+
+		final var path = getObjectsDirectory().resolve(first2).resolve(remaining38);
+
+		try (
+			final var inputStream = new FileInputStream(path.toFile());
+			final var inflaterInputStream = new InflaterInputStream(inputStream)
+		) {
+			final var builder = new StringBuilder();
+
+			int value;
+			while ((value = inflaterInputStream.read()) != -1 && value != ' ') {
+				builder.append((char) value);
+			}
+
+			final var type = ObjectType.byName(builder.toString());
+
+			builder.setLength(0);
+			while ((value = inflaterInputStream.read()) != -1 && value != 0) {
+				builder.append((char) value);
+			}
+
+			final var length = Integer.parseInt(builder.toString());
+			final var content = inflaterInputStream.readNBytes(length);
+
+			return new RawObject(type, content);
+		}
+	}
+
 	@SuppressWarnings("unchecked")
 	public String writeObject(git.domain.Object object) throws IOException, NoSuchAlgorithmException {
 		final var objectType = ObjectType.byClass(object.getClass());
-		final var objectTypeBytes = objectType.getName().getBytes();
 
-		final var temporaryPath = Files.createTempFile("temp-", ".tmp");
+		return writeRawObject(objectType.serialize(object));
+	}
 
-		try {
-			try (
-				final var outputStream = Files.newOutputStream(temporaryPath);
-				final var dataOutputStream = new DataOutputStream(outputStream)
-			) {
-				objectType.serialize(object, dataOutputStream);
-			}
+	public String writeRawObject(RawObject object) throws IOException, NoSuchAlgorithmException {
+		final var content = object.content();
+		final var lengthBytes = String.valueOf(content.length).getBytes();
 
-			final var length = Files.size(temporaryPath);
-			final var lengthBytes = String.valueOf(length).getBytes();
+		byte[] data;
+		try (
+			final var outputStream = new ByteArrayOutputStream();
+			final var dataOutputStream = new DataOutputStream(outputStream)
+		) {
+			outputStream.write(object.type().getName().getBytes());
+			outputStream.write(SPACE_BYTES);
+			outputStream.write(lengthBytes);
+			outputStream.write(NULL_BYTES);
+			outputStream.write(content);
 
-			final var message = MessageDigest.getInstance("SHA-1");
-			message.update(objectTypeBytes);
-			message.update(SPACE_BYTES);
-			message.update(lengthBytes);
-			message.update(NULL_BYTES);
-
-			try (
-				final var inputStream = Files.newInputStream(temporaryPath);
-			) {
-				final var buffer = new byte[1024];
-
-				int read;
-				while ((read = inputStream.read(buffer)) > 0) {
-					message.update(buffer, 0, read);
-				}
-			}
-
-			final var hashBytes = message.digest();
-			final var hash = HexFormat.of().formatHex(hashBytes);
-
-			final var first2 = hash.substring(0, 2);
-			final var first2Directory = new File(getObjectsDirectory().toFile(), first2);
-			first2Directory.mkdirs();
-
-			final var remaining38 = hash.substring(2);
-			final var file = new File(first2Directory, remaining38);
-
-			try (
-				final var outputStream = new FileOutputStream(file);
-				final var deflaterInputStream = new DeflaterOutputStream(outputStream);
-				final var inputStream = Files.newInputStream(temporaryPath)
-			) {
-				deflaterInputStream.write(objectTypeBytes);
-				deflaterInputStream.write(SPACE_BYTES);
-				deflaterInputStream.write(lengthBytes);
-				deflaterInputStream.write(NULL_BYTES);
-				inputStream.transferTo(deflaterInputStream);
-			}
-
-			return hash;
-		} finally {
-			Files.deleteIfExists(temporaryPath);
+			data = outputStream.toByteArray();
 		}
+
+		return writeRawObject(data);
+	}
+
+	public String writeRawObject(byte[] data) throws IOException, NoSuchAlgorithmException {
+		final var hashBytes = MessageDigest.getInstance("SHA-1").digest(data);
+		final var hash = HexFormat.of().formatHex(hashBytes);
+
+		final var first2 = hash.substring(0, 2);
+		final var first2Directory = getObjectsDirectory().resolve(first2);
+		Files.createDirectories(first2Directory);
+
+		final var remaining38 = hash.substring(2);
+		final var path = first2Directory.resolve(remaining38);
+
+		try (
+			final var outputStream = Files.newOutputStream(path);
+			final var deflaterOutputStream = new DeflaterOutputStream(outputStream);
+		) {
+			deflaterOutputStream.write(data);
+		}
+
+		return hash;
 	}
 
 	public String writeBlob(Path path) throws IOException, NoSuchAlgorithmException {
@@ -256,20 +277,66 @@ public class Git {
 		return git;
 	}
 
-	public static Git clone(URI uri, Path path) throws IOException {
+	public static Git clone(URI uri, Path path) throws IOException, DataFormatException, NoSuchAlgorithmException {
 		final var client = new GitClient(uri);
 		final var reference = client.fetchReferences().getFirst();
 		final var pack = client.getPack(reference);
-		new FileOutputStream("test.pack").write(pack);
 
-		System.out.println(Arrays.toString(pack));
-		System.exit(1);
+		final var packParser = new PackParser(ByteBuffer.wrap(pack));
+		final var objects = packParser.parse();
 
-		Files.createDirectories(path);
+		final var git = init(path);
+		//		final var git = open(path);
 
-		final var git = new Git(path);
+		for (final var object : objects) {
+			if (!(object instanceof PackObject.Undeltified undeltified)) {
+				continue;
+			}
+
+			final var type = undeltified.type();
+			final var hash = git.writeRawObject(new RawObject(type, undeltified.content()));
+			System.err.println("wrote %s %s".formatted(hash, type.getName()));
+		}
+
+		for (final var object : objects) {
+			if (!(object instanceof PackObject.Deltified deltified)) {
+				continue;
+			}
+
+			final var baseHash = deltified.baseHash();
+			final var base = git.readRawObject(baseHash);
+			final var baseType = base.type();
+
+			System.err.println("apply delta %s %s".formatted(baseHash, baseType.getName()));
+
+			final var content = new byte[deltified.size()];
+			final var buffer = ByteBuffer.wrap(content);
+
+			for (final var instruction : deltified.instructions()) {
+				if (instruction instanceof DeltaInstruction.Copy copy) {
+					buffer.put(base.content(), copy.offset(), copy.size());
+				} else if (instruction instanceof DeltaInstruction.Insert insert) {
+					buffer.put(insert.data());
+				} else {
+					throw new UnsupportedOperationException("unknown instruction: " + instruction);
+				}
+			}
+
+			if (buffer.hasRemaining()) {
+				throw new IllegalStateException("buffer is not full");
+			}
+
+			final var hash = git.writeRawObject(new RawObject(baseType, content));
+			System.err.println("wrote %s %s".formatted(hash, baseType.getName()));
+		}
 
 		return git;
 	}
+
+	@SuppressWarnings("rawtypes")
+	private static record RawObject(
+		ObjectType type,
+		byte[] content
+	) {}
 
 }

@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
 import java.time.ZonedDateTime;
+import java.util.zip.DataFormatException;
 
 import git.domain.AuthorSignature;
 import git.domain.Blob;
@@ -15,7 +16,7 @@ public class Main {
 
 	public static final Path HERE = Paths.get(".");
 
-	public static void main(String[] args) throws IOException, NoSuchAlgorithmException {
+	public static void main(String[] args) throws IOException, NoSuchAlgorithmException, DataFormatException {
 		final var command = args[0];
 
 		switch (command) {
@@ -74,7 +75,7 @@ public class Main {
 		System.out.println(hash);
 	}
 
-	public static void clone(String uri, String path) throws IOException, NoSuchAlgorithmException {
+	public static void clone(String uri, String path) throws IOException, NoSuchAlgorithmException, DataFormatException {
 		Git.clone(URI.create(uri), Paths.get(path));
 
 		System.out.println("Cloned git repository");

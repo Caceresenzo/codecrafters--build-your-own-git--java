@@ -11,7 +11,7 @@ import git.domain.tree.TreeEntry;
 import git.domain.tree.TreeEntryMode;
 import git.domain.tree.TreeEntryModeType;
 
-public class TreeSerializer implements ObjectSerializer<Tree> {
+public class TreeSerializer implements ObjectContentSerializer<Tree> {
 
 	@Override
 	public void serialize(Tree tree, DataOutputStream dataOutputStream) throws IOException {

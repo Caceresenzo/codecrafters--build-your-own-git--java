@@ -6,7 +6,7 @@ import java.io.IOException;
 
 import git.domain.Blob;
 
-public class BlobSerializer implements ObjectSerializer<Blob> {
+public class BlobSerializer implements ObjectContentSerializer<Blob> {
 
 	@Override
 	public void serialize(Blob blob, DataOutputStream dataOutputStream) throws IOException {
