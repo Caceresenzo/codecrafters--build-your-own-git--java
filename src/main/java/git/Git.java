@@ -339,8 +339,8 @@ public class Git {
 		final var packParser = new PackParser(ByteBuffer.wrap(pack));
 		final var objects = packParser.parse();
 
-		//		final var git = init(path);
-		final var git = open(path);
+		final var git = init(path);
+		//		final var git = open(path);
 
 		for (final var object : objects) {
 			if (!(object instanceof PackObject.Undeltified undeltified)) {
